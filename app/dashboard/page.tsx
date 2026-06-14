@@ -1,7 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import AuthGuard from '@/components/AuthGuard'
 
 type Customer = {
   id: string
@@ -63,7 +62,6 @@ export default function Dashboard() {
   )
 
   return (
-    <AuthGuard>
     <main className="max-w-5xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-6">👥 客户管理</h1>
 
@@ -146,6 +144,5 @@ export default function Dashboard() {
         )}
       </div>
     </main>
-    </AuthGuard>
   )
 }

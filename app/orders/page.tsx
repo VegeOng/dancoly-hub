@@ -1,7 +1,6 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import AuthGuard from '@/components/AuthGuard'
 
 const PRODUCTS = [
   'PL05-1 Rosemary Shampoo 400ml',
@@ -258,7 +257,6 @@ ${notes}`
   }
 
   return (
-    <AuthGuard>
     <main className="max-w-5xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-6">📋 Orders</h1>
 
@@ -463,6 +461,5 @@ ${notes}`
         )}
       </div>
     </main>
-    </AuthGuard>
   )
 }
