@@ -6,7 +6,7 @@ export default function Home() {
         <p className="text-gray-500">法国人参生发精华液 · 专属 CRM 系统</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <a href="/dashboard" className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow text-center">
           <div className="text-4xl mb-3">👥</div>
           <h2 className="font-semibold text-lg mb-1">客户管理</h2>
@@ -23,6 +23,12 @@ export default function Home() {
           <div className="text-4xl mb-3">📊</div>
           <h2 className="font-semibold text-lg mb-1">销售统计</h2>
           <p className="text-gray-400 text-sm">总销售额、回购率、客户增长趋势</p>
+        </a>
+
+        <a href="/integrations" className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow text-center">
+          <div className="text-4xl mb-3">🔗</div>
+          <h2 className="font-semibold text-lg mb-1">平台连接</h2>
+          <p className="text-gray-400 text-sm">连接 TikTok Shop、Shopee、Meta</p>
         </a>
       </div>
     </main>
