@@ -16,7 +16,6 @@ export type InvoiceItem = {
   tax_code: string
   description: string
   product_code: string
-  packing: string
   qty: number
   uom: string
   unit_price: number

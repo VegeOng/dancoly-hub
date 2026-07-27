@@ -77,7 +77,6 @@ export default function InvoiceDocument({ invoice }: { invoice: Invoice }) {
               <td className="desc">
                 <div className="en">{it.description}</div>
                 {it.product_code && <div className="code">{it.product_code}</div>}
-                {it.packing && <span className="pack">{it.packing}</span>}
               </td>
               <td className="num">{it.qty}</td>
               <td className="center">{it.uom}</td>
