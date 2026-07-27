@@ -60,7 +60,6 @@ export default function InvoiceDocument({ invoice }: { invoice: Invoice }) {
         <thead>
           <tr>
             <th style={{ width: 34 }}>Item</th>
-            <th style={{ width: 60 }}>Tax<br />Code</th>
             <th>Description</th>
             <th className="num" style={{ width: 66 }}>Qty</th>
             <th className="center" style={{ width: 64 }}>UOM</th>
@@ -73,7 +72,6 @@ export default function InvoiceDocument({ invoice }: { invoice: Invoice }) {
           {inv.items.map((it, i) => (
             <tr key={i}>
               <td className="item">{it.line_no}.</td>
-              <td className="tax">{it.tax_code}</td>
               <td className="desc">
                 <div className="en">{it.description}</div>
                 {it.product_code && <div className="code">{it.product_code}</div>}

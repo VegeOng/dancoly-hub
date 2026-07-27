@@ -8,7 +8,6 @@ import {
 } from '@/lib/invoice'
 
 type FormItem = {
-  tax_code: string
   description: string
   product_code: string
   qty: string
@@ -18,7 +17,7 @@ type FormItem = {
 }
 
 const blankItem = (): FormItem => ({
-  tax_code: 'SR', description: '', product_code: '',
+  description: '', product_code: '',
   qty: '1', uom: 'UNIT', unit_price: '', discount: '',
 })
 
@@ -110,7 +109,7 @@ export default function Orders() {
       if (error) throw error
 
       const payload = valid.map((it, i) => ({
-        invoice_id: inv.id, line_no: i + 1, tax_code: it.tax_code,
+        invoice_id: inv.id, line_no: i + 1,
         description: it.description.trim(), product_code: it.product_code.trim(),
         qty: num(it.qty), uom: it.uom,
         unit_price: num(it.unit_price), discount: num(it.discount), line_total: lineTotal(it),
@@ -214,9 +213,8 @@ export default function Orders() {
                     <span className="text-xs text-gray-400 pt-2 w-4">{i + 1}.</span>
                     <div className="flex-1 grid gap-2">
                       <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white" placeholder="Description *" value={it.description} onChange={e => updateItem(i, 'description', e.target.value)} />
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                      <div className="grid grid-cols-2 gap-2">
                         <input className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white" placeholder="Product code" value={it.product_code} onChange={e => updateItem(i, 'product_code', e.target.value)} />
-                        <input className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white" placeholder="Tax code" value={it.tax_code} onChange={e => updateItem(i, 'tax_code', e.target.value)} />
                         <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white" value={it.uom} onChange={e => updateItem(i, 'uom', e.target.value)}>
                           {UOM_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
                         </select>

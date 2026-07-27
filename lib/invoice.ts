@@ -13,7 +13,6 @@ export const UOM_OPTIONS = ['UNIT', 'BTL', 'BOX', 'PKT', 'CTN', 'SET', 'PCS']
 
 export type InvoiceItem = {
   line_no: number
-  tax_code: string
   description: string
   product_code: string
   qty: number
