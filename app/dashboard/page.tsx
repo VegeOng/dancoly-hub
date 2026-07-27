@@ -38,11 +38,10 @@ export default function Dashboard() {
       .order('created_at', { ascending: false })
     setCustomers(data || [])
 
-    const { data: orders } = await supabase
-      .from('orders')
-      .select('total_amount')
-      .eq('payment_status', 'paid')
-    const revenue = orders?.reduce((sum, o) => sum + (o.total_amount || 0), 0) || 0
+    const { data: invs } = await supabase
+      .from('invoices')
+      .select('total')
+    const revenue = invs?.reduce((sum, o) => sum + (o.total || 0), 0) || 0
     const returning = (data || []).filter(c => c.customer_type === 'returning').length
 
     setStats({ total: (data || []).length, returning, revenue })
@@ -69,7 +68,7 @@ export default function Dashboard() {
         {[
           { label: '总客户数', value: `${stats.total} 人` },
           { label: '回购客', value: `${stats.returning} 人` },
-          { label: '已收款', value: `RM ${stats.revenue.toLocaleString()}` },
+          { label: '已开票', value: `RM ${stats.revenue.toLocaleString()}` },
         ].map(s => (
           <div key={s.label} className="bg-amber-50 border border-amber-100 rounded-xl p-4">
             <p className="text-sm text-amber-600">{s.label}</p>

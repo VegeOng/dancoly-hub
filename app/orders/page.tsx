@@ -1,458 +1,314 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import InvoiceDocument from '@/components/InvoiceDocument'
+import {
+  amountInWords, money, DEFAULT_TERMS, UOM_OPTIONS,
+  type Invoice, type InvoiceItem,
+} from '@/lib/invoice'
 
-const PRODUCTS = [
-  'PL05-1 Rosemary Shampoo 400ml',
-  'PL02-1 Verbena Oily Shampoo 400ml',
-  'PL34-2 Iris Shampoo 800ml',
-  'PL05-3 Rosemary Shampoo 800ml',
-  'PL05-4 Rosemary Conditioner 800ml',
-  'PL26-1 Kids Shampoo',
-  'TUM05 Shampoo 600ml',
-  'TUM05 Conditioner 600ml',
-  'G-03 Tonic',
-  'GE-03 Essential',
-  'Other (custom)',
-]
-
-const GIFTS = [
-  '头皮按摩梳',
-  'Sample Pack 3套',
-  '掉发自救指南',
-  'RM100 Voucher',
-  '头皮 Consultation',
-  'Sample Set',
-  'Other',
-]
-
-type ProductLine = {
-  product: string
-  customProduct: string
-  quantity: number
+type FormItem = {
+  tax_code: string
+  description: string
+  product_code: string
+  packing: string
+  qty: string
+  uom: string
+  unit_price: string
+  discount: string
 }
 
-type Order = {
+const blankItem = (): FormItem => ({
+  tax_code: 'SR', description: '', product_code: '', packing: '',
+  qty: '1', uom: 'UNIT', unit_price: '', discount: '',
+})
+
+type ListRow = {
   id: string
-  order_number: string
-  order_code: string
-  quantity: number
-  total_amount: number
-  discount: number
-  gift: string
-  payment_status: string
-  notes: string
-  payment_proof_url: string
-  delivery_address: string
-  created_at: string
-  customers: { name: string; phone: string; customer_type: string }
+  invoice_no: number
+  invoice_date: string
+  bill_to_name: string
+  total: number
 }
+
+const num = (s: string) => parseFloat(s) || 0
+const lineTotal = (it: FormItem) => num(it.qty) * num(it.unit_price) - num(it.discount)
 
 export default function Orders() {
-  const [orders, setOrders] = useState<Order[]>([])
+  const [view, setView] = useState<'list' | 'form' | 'invoice'>('list')
+  const [rows, setRows] = useState<ListRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [current, setCurrent] = useState<Invoice | null>(null)
+
   const [form, setForm] = useState({
-    customer_name: '',
-    customer_source: 'new',
-    order_code: '',
-    total_amount: '',
-    discount: '',
-    notes: '',
-    delivery_address: '',
-    payment_status: 'pending',
+    bill_to_name: '', bill_to_address: '', bill_to_tel: '', bill_to_fax: '',
+    your_ref: '', branch_name: '', terms: DEFAULT_TERMS,
+    invoice_date: new Date().toISOString().slice(0, 10),
   })
-  const [productLines, setProductLines] = useState<ProductLine[]>([
-    { product: PRODUCTS[0], customProduct: '', quantity: 1 }
-  ])
-  const [selectedGifts, setSelectedGifts] = useState<string[]>([])
-  const [otherGift, setOtherGift] = useState('')
-  const [pdfFile, setPdfFile] = useState<File | null>(null)
-  const [pdfPreview, setPdfPreview] = useState<string | null>(null)
-  const [uploading, setUploading] = useState(false)
-  const [completedOrder, setCompletedOrder] = useState<Order | null>(null)
-  const [copied, setCopied] = useState(false)
-  const fileRef = useRef<HTMLInputElement>(null)
+  const [items, setItems] = useState<FormItem[]>([blankItem()])
 
-  useEffect(() => { loadOrders() }, [])
+  useEffect(() => { loadList() }, [])
 
-  async function loadOrders() {
+  async function loadList() {
     setLoading(true)
-    const { data } = await supabase
-      .from('orders')
-      .select('*, customers(name, phone, customer_type)')
-      .order('created_at', { ascending: false })
-    setOrders(data || [])
-    setLoading(false)
+    setLoadError(null)
+    try {
+      const { data, error } = await supabase
+        .from('invoices')
+        .select('id, invoice_no, invoice_date, bill_to_name, total')
+        .order('invoice_no', { ascending: false })
+      if (error) throw error
+      setRows(data || [])
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : '无法连接数据库')
+      setRows([])
+    } finally {
+      setLoading(false)
+    }
   }
 
-  function addProductLine() {
-    setProductLines([...productLines, { product: PRODUCTS[0], customProduct: '', quantity: 1 }])
+  const subtotal = items.reduce((s, it) => s + num(it.qty) * num(it.unit_price), 0)
+  const discountTotal = items.reduce((s, it) => s + num(it.discount), 0)
+  const total = subtotal - discountTotal
+
+  function updateItem(i: number, field: keyof FormItem, value: string) {
+    setItems(prev => prev.map((it, idx) => idx === i ? { ...it, [field]: value } : it))
+  }
+  const addItem = () => setItems(prev => [...prev, blankItem()])
+  const removeItem = (i: number) => setItems(prev => prev.filter((_, idx) => idx !== i))
+
+  function resetForm() {
+    setForm({
+      bill_to_name: '', bill_to_address: '', bill_to_tel: '', bill_to_fax: '',
+      your_ref: '', branch_name: '', terms: DEFAULT_TERMS,
+      invoice_date: new Date().toISOString().slice(0, 10),
+    })
+    setItems([blankItem()])
   }
 
-  function removeProductLine(index: number) {
-    setProductLines(productLines.filter((_, i) => i !== index))
+  async function saveInvoice() {
+    if (!form.bill_to_name.trim()) return alert('请填写买方名称 (Bill To)')
+    const valid = items.filter(it => it.description.trim())
+    if (valid.length === 0) return alert('请至少填写一项商品')
+
+    setSaving(true)
+    try {
+      const words = amountInWords(total)
+      const { data: inv, error } = await supabase.from('invoices').insert({
+        bill_to_name: form.bill_to_name.trim(),
+        bill_to_address: form.bill_to_address.trim(),
+        bill_to_tel: form.bill_to_tel.trim(),
+        bill_to_fax: form.bill_to_fax.trim(),
+        your_ref: form.your_ref.trim(),
+        branch_name: form.branch_name.trim(),
+        terms: form.terms.trim(),
+        invoice_date: form.invoice_date,
+        subtotal, discount_total: discountTotal, total,
+        amount_in_words: words,
+      }).select().single()
+      if (error) throw error
+
+      const payload = valid.map((it, i) => ({
+        invoice_id: inv.id, line_no: i + 1, tax_code: it.tax_code,
+        description: it.description.trim(), product_code: it.product_code.trim(),
+        packing: it.packing.trim(), qty: num(it.qty), uom: it.uom,
+        unit_price: num(it.unit_price), discount: num(it.discount), line_total: lineTotal(it),
+      }))
+      const { error: itemsError } = await supabase.from('invoice_items').insert(payload)
+      if (itemsError) throw itemsError
+
+      const built: Invoice = {
+        ...inv,
+        items: payload.map(p => ({ ...p } as InvoiceItem)),
+      }
+      setCurrent(built)
+      setView('invoice')
+      resetForm()
+      loadList()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '保存发票失败,请重试')
+    } finally {
+      setSaving(false)
+    }
   }
 
-  function updateProductLine(index: number, field: keyof ProductLine, value: string | number) {
-    const updated = [...productLines]
-    updated[index] = { ...updated[index], [field]: value }
-    setProductLines(updated)
+  async function openInvoice(id: string) {
+    try {
+      const { data: inv, error } = await supabase.from('invoices').select('*').eq('id', id).single()
+      if (error) throw error
+      const { data: its, error: e2 } = await supabase
+        .from('invoice_items').select('*').eq('invoice_id', id).order('line_no')
+      if (e2) throw e2
+      setCurrent({ ...inv, items: (its || []) as InvoiceItem[] })
+      setView('invoice')
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '无法打开发票')
+    }
   }
 
-  function toggleGift(gift: string) {
-    setSelectedGifts(prev =>
-      prev.includes(gift) ? prev.filter(g => g !== gift) : [...prev, gift]
+  // ---------- Invoice view ----------
+  if (view === 'invoice' && current) {
+    return (
+      <main className="max-w-5xl mx-auto p-6">
+        <div className="inv-noprint flex gap-3 mb-4">
+          <button onClick={() => window.print()} className="bg-amber-600 hover:bg-amber-700 text-white px-5 py-2 rounded-lg text-sm font-medium">
+            🖨 Print / Save PDF
+          </button>
+          <button onClick={() => { setCurrent(null); setView('list') }} className="border border-gray-300 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm">
+            ← Back to list
+          </button>
+        </div>
+        <InvoiceDocument invoice={current} />
+      </main>
     )
   }
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setPdfFile(file)
-    const url = URL.createObjectURL(file)
-    setPdfPreview(url)
+  // ---------- Form view ----------
+  if (view === 'form') {
+    return (
+      <main className="max-w-4xl mx-auto p-6">
+        <div className="flex items-center justify-between mb-5">
+          <h1 className="text-2xl font-bold">New Invoice</h1>
+          <button onClick={() => { resetForm(); setView('list') }} className="text-sm text-gray-500 hover:text-gray-800">✕ Cancel</button>
+        </div>
+
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 space-y-6">
+          {/* Bill To + meta */}
+          <div className="grid md:grid-cols-2 gap-5">
+            <div>
+              <h3 className="font-semibold text-amber-800 mb-2 text-sm uppercase tracking-wide">Bill To</h3>
+              <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full mb-2" placeholder="Customer name *" value={form.bill_to_name} onChange={e => setForm({ ...form, bill_to_name: e.target.value })} />
+              <textarea className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full mb-2" rows={2} placeholder="Address" value={form.bill_to_address} onChange={e => setForm({ ...form, bill_to_address: e.target.value })} />
+              <div className="grid grid-cols-2 gap-2">
+                <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Tel" value={form.bill_to_tel} onChange={e => setForm({ ...form, bill_to_tel: e.target.value })} />
+                <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Fax" value={form.bill_to_fax} onChange={e => setForm({ ...form, bill_to_fax: e.target.value })} />
+              </div>
+            </div>
+            <div>
+              <h3 className="font-semibold text-amber-800 mb-2 text-sm uppercase tracking-wide">Invoice Details</h3>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-xs text-gray-500">Date
+                  <input type="date" className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full mt-1" value={form.invoice_date} onChange={e => setForm({ ...form, invoice_date: e.target.value })} />
+                </label>
+                <label className="text-xs text-gray-500">Terms
+                  <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full mt-1" value={form.terms} onChange={e => setForm({ ...form, terms: e.target.value })} />
+                </label>
+                <label className="text-xs text-gray-500">Your Ref
+                  <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full mt-1" value={form.your_ref} onChange={e => setForm({ ...form, your_ref: e.target.value })} />
+                </label>
+                <label className="text-xs text-gray-500">Branch Name
+                  <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full mt-1" value={form.branch_name} onChange={e => setForm({ ...form, branch_name: e.target.value })} />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Line items */}
+          <div>
+            <h3 className="font-semibold text-amber-800 mb-2 text-sm uppercase tracking-wide">Items</h3>
+            <div className="space-y-2">
+              {items.map((it, i) => (
+                <div key={i} className="border border-gray-100 rounded-lg p-3 bg-gray-50/60">
+                  <div className="flex gap-2 items-start">
+                    <span className="text-xs text-gray-400 pt-2 w-4">{i + 1}.</span>
+                    <div className="flex-1 grid gap-2">
+                      <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white" placeholder="Description *" value={it.description} onChange={e => updateItem(i, 'description', e.target.value)} />
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        <input className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white" placeholder="Product code" value={it.product_code} onChange={e => updateItem(i, 'product_code', e.target.value)} />
+                        <input className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white" placeholder="Packing (e.g. 1CTN@12BTL)" value={it.packing} onChange={e => updateItem(i, 'packing', e.target.value)} />
+                        <input className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white" placeholder="Tax code" value={it.tax_code} onChange={e => updateItem(i, 'tax_code', e.target.value)} />
+                        <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white" value={it.uom} onChange={e => updateItem(i, 'uom', e.target.value)}>
+                          {UOM_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 items-center">
+                        <label className="text-xs text-gray-500">Qty
+                          <input type="number" min="0" className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm w-full mt-0.5 bg-white" value={it.qty} onChange={e => updateItem(i, 'qty', e.target.value)} />
+                        </label>
+                        <label className="text-xs text-gray-500">Unit Price (RM)
+                          <input type="number" min="0" step="0.01" className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm w-full mt-0.5 bg-white" placeholder="0.00" value={it.unit_price} onChange={e => updateItem(i, 'unit_price', e.target.value)} />
+                        </label>
+                        <label className="text-xs text-gray-500">Disc. (RM)
+                          <input type="number" min="0" step="0.01" className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm w-full mt-0.5 bg-white" placeholder="0.00" value={it.discount} onChange={e => updateItem(i, 'discount', e.target.value)} />
+                        </label>
+                        <div className="text-xs text-gray-500">Line Total
+                          <div className="font-semibold text-amber-700 text-sm mt-1.5">RM {money(lineTotal(it))}</div>
+                        </div>
+                      </div>
+                    </div>
+                    {items.length > 1 && (
+                      <button onClick={() => removeItem(i)} className="text-red-400 hover:text-red-600 text-xl leading-none pt-1" title="Remove">×</button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <button onClick={addItem} className="text-amber-600 hover:text-amber-800 text-sm font-medium">+ Add item</button>
+            </div>
+          </div>
+
+          {/* Totals */}
+          <div className="flex justify-end">
+            <div className="w-64 text-sm">
+              <div className="flex justify-between py-1 text-gray-500"><span>Subtotal</span><span>RM {money(subtotal)}</span></div>
+              <div className="flex justify-between py-1 text-gray-500"><span>Discount</span><span>RM {money(discountTotal)}</span></div>
+              <div className="flex justify-between py-2 mt-1 border-t border-gray-200 font-bold text-amber-800"><span>TOTAL</span><span>RM {money(total)}</span></div>
+            </div>
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <button onClick={saveInvoice} disabled={saving} className="bg-amber-600 hover:bg-amber-700 text-white px-6 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50">
+              {saving ? 'Saving…' : 'Create Invoice'}
+            </button>
+            <button onClick={() => { resetForm(); setView('list') }} className="border border-gray-300 px-4 py-2.5 rounded-lg text-sm">Cancel</button>
+          </div>
+        </div>
+      </main>
+    )
   }
 
-  function getAllGifts() {
-    const gifts = selectedGifts.filter(g => g !== 'Other')
-    if (selectedGifts.includes('Other') && otherGift) {
-      gifts.push(otherGift)
-    }
-    return gifts.join(', ')
-  }
-
-  async function addOrder() {
-    if (!form.customer_name) return alert('Please enter customer name')
-    if (!form.order_code) return alert('Please enter order code')
-    if (!form.total_amount) return alert('Please enter total amount')
-    if (!pdfFile) return alert('Please upload payment proof')
-    if (!form.delivery_address) return alert('Please enter delivery address')
-
-    setUploading(true)
-
-    const res = await fetch('/api/order-number')
-    const { orderNumber } = await res.json()
-
-    const fileName = `${orderNumber}-${Date.now()}`
-    await supabase.storage
-      .from('payment-proofs')
-      .upload(fileName, pdfFile, { contentType: pdfFile.type })
-
-    const { data: urlData } = supabase.storage
-      .from('payment-proofs')
-      .getPublicUrl(fileName)
-
-    const pdfUrl = urlData?.publicUrl || ''
-
-    const productSummary = productLines
-      .map(p => `${p.product === 'Other (custom)' ? p.customProduct : p.product} x${p.quantity}`)
-      .join(', ')
-
-    let customer = null
-    const { data: existing } = await supabase
-      .from('customers')
-      .select('id')
-      .eq('name', form.customer_name)
-      .single()
-
-    if (existing) {
-      customer = existing
-      if (form.customer_source === 'returning') {
-        await supabase.from('customers').update({ customer_type: 'returning' }).eq('id', existing.id)
-      }
-    } else {
-      const { data: newCustomer } = await supabase
-        .from('customers')
-        .insert({ name: form.customer_name, customer_type: form.customer_source })
-        .select()
-        .single()
-      customer = newCustomer
-    }
-
-    const { data: newOrder } = await supabase.from('orders').insert({
-      order_number: orderNumber,
-      order_code: form.order_code,
-      customer_id: customer.id,
-      quantity: productLines.reduce((sum, p) => sum + p.quantity, 0),
-      unit_price: 0,
-      total_amount: parseFloat(form.total_amount),
-      discount: parseFloat(form.discount || '0'),
-      gift: getAllGifts(),
-      notes: `Products: ${productSummary}${form.notes ? ' | Notes: ' + form.notes : ''}`,
-      payment_status: form.payment_status,
-      payment_proof_url: pdfUrl,
-      delivery_address: form.delivery_address,
-    }).select('*, customers(name, phone, customer_type)').single()
-
-    setCompletedOrder(newOrder)
-    setForm({ customer_name: '', customer_source: 'new', order_code: '', total_amount: '', discount: '', notes: '', delivery_address: '', payment_status: 'pending' })
-    setProductLines([{ product: PRODUCTS[0], customProduct: '', quantity: 1 }])
-    setSelectedGifts([])
-    setOtherGift('')
-    setPdfFile(null)
-    setPdfPreview(null)
-    setShowForm(false)
-    setUploading(false)
-    loadOrders()
-  }
-
-  function generateMessage(order: Order) {
-    const products = order.notes?.replace('Products: ', '').split(' | Notes:')[0] || '-'
-    const notes = order.notes?.includes('| Notes:') ? order.notes.split('| Notes: ')[1] : '-'
-    const final = (order.total_amount - (order.discount || 0)).toFixed(2)
-    return `🛍️ NEW ORDER
-
-Order Code: ${order.order_code || '-'}
-Date: ${new Date(order.created_at).toLocaleDateString('en-MY')}
-
-👤 Customer Info
-Name: ${order.customers?.name}
-Type: ${order.customers?.customer_type === 'returning' ? 'Repeat Customer' : 'New Customer'}
-
-📦 Products
-${products.split(', ').map((p: string) => `- ${p}`).join('\n')}
-
-🎁 Gifts
-${order.gift ? order.gift.split(', ').map((g: string) => `- ${g}`).join('\n') : '- None'}
-
-💰 Payment
-Total: RM ${order.total_amount}
-Discount: RM ${order.discount || 0}
-Final: RM ${final}
-
-📍 Delivery Address
-${order.delivery_address || '-'}
-
-💳 Payment Proof
-${order.payment_proof_url}
-
-📝 Notes
-${notes}`
-  }
-
-  function copyMessage(order: Order) {
-    navigator.clipboard.writeText(generateMessage(order))
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  function sendWhatsApp(order: Order) {
-    const msg = encodeURIComponent(generateMessage(order))
-    window.open(`https://wa.me/?text=${msg}`, '_blank')
-  }
-
-  async function updateStatus(id: string, status: string) {
-    await supabase.from('orders').update({ payment_status: status }).eq('id', id)
-    loadOrders()
-  }
-
-  const statusColor: Record<string, string> = {
-    pending: 'bg-yellow-50 text-yellow-700',
-    paid: 'bg-green-50 text-green-700',
-    overdue: 'bg-red-50 text-red-700',
-  }
-  const statusLabel: Record<string, string> = {
-    pending: 'Pending', paid: 'Paid', overdue: 'Overdue'
-  }
-
+  // ---------- List view ----------
   return (
     <main className="max-w-5xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6">📋 Orders</h1>
-
-      {completedOrder && (
-        <div className="bg-green-50 border border-green-200 rounded-xl p-5 mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-green-800">✅ Order Created Successfully!</h3>
-            <button onClick={() => setCompletedOrder(null)} className="text-green-400 hover:text-green-600 text-xl">×</button>
-          </div>
-          <pre className="bg-white rounded-lg p-4 text-sm text-gray-700 whitespace-pre-wrap border border-green-100 mb-4">
-            {generateMessage(completedOrder)}
-          </pre>
-          <div className="flex gap-3">
-            <button onClick={() => copyMessage(completedOrder)} className="bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-lg text-sm font-medium">
-              {copied ? '✅ Copied!' : '📋 Copy Message'}
-            </button>
-            <button onClick={() => sendWhatsApp(completedOrder)} className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
-              📲 Send to Dispatch (WhatsApp)
-            </button>
-          </div>
-        </div>
-      )}
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">🧾 Invoices</h1>
+        <button onClick={() => { resetForm(); setView('form') }} className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+          + New Invoice
+        </button>
+      </div>
 
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-        <div className="flex justify-between mb-4">
-          <h2 className="font-medium">All Orders</h2>
-          <button onClick={() => setShowForm(!showForm)} className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
-            + New Order
-          </button>
-        </div>
-
-        {showForm && (
-          <div className="bg-amber-50 rounded-xl p-5 mb-6 space-y-5">
-
-            {/* Customer Info */}
-            <div>
-              <h3 className="font-semibold text-amber-800 mb-3">Customer Info</h3>
-              <div className="grid grid-cols-2 gap-3">
-                <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Customer Name *" value={form.customer_name} onChange={e => setForm({...form, customer_name: e.target.value})} />
-                <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm" value={form.customer_source} onChange={e => setForm({...form, customer_source: e.target.value})}>
-                  <option value="new">New Customer</option>
-                  <option value="returning">Repeat Customer</option>
-                </select>
-                <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm col-span-2" placeholder="Order Code * (e.g. DC-001)" value={form.order_code} onChange={e => setForm({...form, order_code: e.target.value})} />
-              </div>
-            </div>
-
-            {/* Products */}
-            <div>
-              <h3 className="font-semibold text-amber-800 mb-3">Products</h3>
-              <div className="space-y-2">
-                {productLines.map((line, index) => (
-                  <div key={index} className="flex gap-2 items-center">
-                    <select className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm" value={line.product} onChange={e => updateProductLine(index, 'product', e.target.value)}>
-                      {PRODUCTS.map(p => <option key={p} value={p}>{p}</option>)}
-                    </select>
-                    {line.product === 'Other (custom)' && (
-                      <input className="w-36 border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Product name" value={line.customProduct} onChange={e => updateProductLine(index, 'customProduct', e.target.value)} />
-                    )}
-                    <input type="number" min="1" className="w-20 border border-gray-200 rounded-lg px-3 py-2 text-sm" value={line.quantity} onChange={e => updateProductLine(index, 'quantity', parseInt(e.target.value))} />
-                    {productLines.length > 1 && (
-                      <button onClick={() => removeProductLine(index)} className="text-red-400 hover:text-red-600 text-xl">×</button>
-                    )}
-                  </div>
-                ))}
-                <button onClick={addProductLine} className="text-amber-600 hover:text-amber-800 text-sm font-medium">+ Add Product</button>
-              </div>
-            </div>
-
-            {/* Amount */}
-            <div>
-              <h3 className="font-semibold text-amber-800 mb-3">Amount</h3>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="text-xs text-gray-500 mb-1 block">Total Amount (RM) *</label>
-                  <input type="number" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="0.00" value={form.total_amount} onChange={e => setForm({...form, total_amount: e.target.value})} />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 mb-1 block">Discount (RM)</label>
-                  <input type="number" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="0.00" value={form.discount} onChange={e => setForm({...form, discount: e.target.value})} />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 mb-1 block">Final Amount (RM)</label>
-                  <div className="w-full border border-amber-200 bg-white rounded-lg px-3 py-2 text-sm font-semibold text-amber-700">
-                    RM {form.total_amount && !isNaN(parseFloat(form.total_amount))
-                      ? (parseFloat(form.total_amount) - parseFloat(form.discount || '0')).toFixed(2)
-                      : '0.00'}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Payment Status */}
-            <div>
-              <h3 className="font-semibold text-amber-800 mb-3">Payment Status</h3>
-              <select className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-48" value={form.payment_status} onChange={e => setForm({...form, payment_status: e.target.value})}>
-                <option value="pending">Pending</option>
-                <option value="paid">Paid</option>
-                <option value="overdue">Overdue</option>
-              </select>
-            </div>
-
-            {/* Gifts */}
-            <div>
-              <h3 className="font-semibold text-amber-800 mb-3">Gifts</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                {GIFTS.map(gift => (
-                  <div key={gift}>
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input type="checkbox" checked={selectedGifts.includes(gift)} onChange={() => toggleGift(gift)} className="accent-amber-500" />
-                      {gift}
-                    </label>
-                    {gift === 'Other' && selectedGifts.includes('Other') && (
-                      <input
-                        className="mt-2 border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-full"
-                        placeholder="Specify gift..."
-                        value={otherGift}
-                        onChange={e => setOtherGift(e.target.value)}
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Delivery Address */}
-            <div>
-              <h3 className="font-semibold text-amber-800 mb-3">Delivery Address *</h3>
-              <textarea className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" rows={3} placeholder="Full delivery address..." value={form.delivery_address} onChange={e => setForm({...form, delivery_address: e.target.value})} />
-            </div>
-
-            {/* Payment Proof */}
-            <div>
-              <h3 className="font-semibold text-amber-800 mb-3">Payment Proof *</h3>
-              <input ref={fileRef} type="file" accept=".pdf,image/*" onChange={handleFileChange} className="hidden" />
-              <button onClick={() => fileRef.current?.click()} className="border-2 border-dashed border-amber-300 rounded-xl px-6 py-4 text-sm text-amber-600 hover:bg-amber-100 w-full">
-                {pdfFile ? `✅ ${pdfFile.name}` : '📎 Click to upload PDF or Image'}
-              </button>
-              {pdfPreview && pdfFile?.type === 'application/pdf' && (
-                <iframe src={pdfPreview} className="w-full h-64 mt-3 rounded-lg border border-gray-200" />
-              )}
-              {pdfPreview && pdfFile?.type !== 'application/pdf' && (
-                <img src={pdfPreview} alt="Payment proof" className="w-full max-h-64 object-contain mt-3 rounded-lg border border-gray-200" />
-              )}
-            </div>
-
-            {/* Notes */}
-            <div>
-              <h3 className="font-semibold text-amber-800 mb-3">Notes</h3>
-              <textarea className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" rows={2} placeholder="Additional notes..." value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} />
-            </div>
-
-            <div className="flex gap-2 pt-2">
-              <button onClick={addOrder} disabled={uploading} className="bg-amber-500 hover:bg-amber-600 text-white px-5 py-2 rounded-lg text-sm font-medium disabled:opacity-50">
-                {uploading ? 'Uploading...' : 'Submit Order'}
-              </button>
-              <button onClick={() => setShowForm(false)} className="border border-gray-200 px-4 py-2 rounded-lg text-sm">Cancel</button>
-            </div>
-          </div>
-        )}
-
         {loading ? (
-          <p className="text-center text-gray-400 py-8">Loading...</p>
+          <p className="text-center text-gray-400 py-8">Loading…</p>
+        ) : loadError ? (
+          <div className="text-center py-8">
+            <p className="text-red-600 font-medium mb-1">⚠️ 无法加载发票</p>
+            <p className="text-gray-400 text-xs mb-3">{loadError}</p>
+            <button onClick={loadList} className="border border-gray-200 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm">重试</button>
+          </div>
+        ) : rows.length === 0 ? (
+          <p className="text-center text-gray-400 py-10 text-sm">还没有发票。点右上角「+ New Invoice」开第一张。</p>
         ) : (
           <table className="w-full text-sm">
             <thead>
               <tr className="text-gray-400 border-b text-left">
-                <th className="pb-2">Order Code</th>
-                <th className="pb-2">Customer</th>
-                <th className="pb-2">Total</th>
-                <th className="pb-2">Discount</th>
-                <th className="pb-2">Final</th>
-                <th className="pb-2">Status</th>
-                <th className="pb-2">Action</th>
+                <th className="pb-2 font-medium">No.</th>
+                <th className="pb-2 font-medium">Date</th>
+                <th className="pb-2 font-medium">Bill To</th>
+                <th className="pb-2 font-medium text-right">Total (RM)</th>
+                <th className="pb-2 font-medium text-right">Action</th>
               </tr>
             </thead>
             <tbody>
-              {orders.map(o => (
-                <tr key={o.id} className="border-b last:border-0 hover:bg-gray-50">
-                  <td className="py-2 font-mono text-xs text-gray-500">{o.order_code || o.order_number}</td>
-                  <td className="py-2 font-medium">{o.customers?.name}</td>
-                  <td className="py-2 text-gray-400 text-xs">RM {o.total_amount}</td>
-                  <td className="py-2 text-gray-400 text-xs">RM {o.discount || 0}</td>
-                  <td className="py-2 font-semibold text-amber-700">RM {(o.total_amount - (o.discount || 0)).toFixed(2)}</td>
-                  <td className="py-2">
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${statusColor[o.payment_status]}`}>
-                      {statusLabel[o.payment_status]}
-                    </span>
-                  </td>
-                  <td className="py-2 flex gap-2 items-center">
-                    <select className="text-xs border border-gray-200 rounded px-1 py-0.5" value={o.payment_status} onChange={e => updateStatus(o.id, e.target.value)}>
-                      <option value="pending">Pending</option>
-                      <option value="paid">Paid</option>
-                      <option value="overdue">Overdue</option>
-                    </select>
-                    <button onClick={() => sendWhatsApp(o)} className="text-green-500 hover:text-green-700 text-lg" title="Send to Dispatch">📲</button>
+              {rows.map(r => (
+                <tr key={r.id} className="border-b last:border-0 hover:bg-gray-50">
+                  <td className="py-2.5 font-mono font-semibold">{r.invoice_no}</td>
+                  <td className="py-2.5 text-gray-500">{r.invoice_date?.split('-').reverse().join('/')}</td>
+                  <td className="py-2.5 font-medium">{r.bill_to_name}</td>
+                  <td className="py-2.5 text-right tabular-nums font-semibold text-amber-700">{money(r.total)}</td>
+                  <td className="py-2.5 text-right">
+                    <button onClick={() => openInvoice(r.id)} className="text-amber-600 hover:text-amber-800 font-medium">View / Print →</button>
                   </td>
                 </tr>
               ))}
