@@ -35,7 +35,7 @@ const lineTotal = (it: FormItem) => num(it.qty) * num(it.unit_price) - num(it.di
 
 const blankForm = () => ({
   bill_to_name: '', bill_to_address: '', bill_to_tel: '', bill_to_fax: '',
-  terms: DEFAULT_TERMS,
+  terms: DEFAULT_TERMS, notes: '',
   invoice_date: new Date().toISOString().slice(0, 10),
 })
 
@@ -105,6 +105,7 @@ export default function Orders() {
         bill_to_tel: form.bill_to_tel.trim(),
         bill_to_fax: form.bill_to_fax.trim(),
         terms: form.terms.trim(),
+        notes: form.notes.trim() || undefined,
         invoice_date: form.invoice_date,
         subtotal, discount_total: discountTotal, total,
         amount_in_words: words,
@@ -183,6 +184,7 @@ export default function Orders() {
         bill_to_tel: inv.bill_to_tel || '',
         bill_to_fax: inv.bill_to_fax || '',
         terms: inv.terms || DEFAULT_TERMS,
+        notes: inv.notes || '',
         invoice_date: inv.invoice_date || new Date().toISOString().slice(0, 10),
       })
       setItems(
@@ -262,6 +264,9 @@ export default function Orders() {
                 </label>
                 <label className="text-xs text-gray-500 col-span-2">Terms
                   <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full mt-1" value={form.terms} onChange={e => setForm({ ...form, terms: e.target.value })} />
+                </label>
+                <label className="text-xs text-gray-500 col-span-2">Remark
+                  <textarea className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full mt-1" rows={2} placeholder="Optional remark printed on invoice" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
                 </label>
               </div>
             </div>

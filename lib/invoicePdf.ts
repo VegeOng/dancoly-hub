@@ -113,13 +113,6 @@ export function downloadInvoicePdf(inv: Invoice) {
   const finalY = (doc as any).lastAutoTable.finalY as number
   let ty = Math.max(finalY + 6, 195)
 
-  // amount in words box (left)
-  doc.setDrawColor(...INK).setLineWidth(0.3).rect(L, ty, 100, 18)
-  doc.setFont('helvetica', 'normal').setFontSize(7).setTextColor(...MUTE)
-  doc.text('AMOUNT IN WORDS', L + 3, ty + 4)
-  doc.setFont('helvetica', 'bold').setFontSize(8.5).setTextColor(...INK)
-  doc.text(doc.splitTextToSize(inv.amount_in_words || '', 94), L + 3, ty + 9)
-
   // right totals
   const rl = 125
   doc.setFont('helvetica', 'normal').setFontSize(9.5).setTextColor(...SOFT)
@@ -136,8 +129,28 @@ export function downloadInvoicePdf(inv: Invoice) {
   doc.setFontSize(13).setTextColor(...GOLD_DEEP)
   doc.text(`RM ${money(inv.total)}`, R - 2, gy + 7.2, { align: 'right' })
 
+  // Amount in Words — plain text, no box
+  let wy = gy + 15
+  doc.setDrawColor(...HAIR).setLineWidth(0.15).line(L, wy - 1, R, wy - 1)
+  doc.setFont('helvetica', 'bold').setFontSize(8.5).setTextColor(...MUTE)
+  doc.text('Amount in Words :', L, wy + 5)
+  doc.setFont('helvetica', 'bold').setFontSize(8.5).setTextColor(...INK)
+  const wordsLines = doc.splitTextToSize(inv.amount_in_words || '', R - L - 44) as string[]
+  doc.text(wordsLines, L + 42, wy + 5)
+  wy += Math.max(wordsLines.length * 4.5, 6) + 6
+
+  // Remark
+  if (inv.notes) {
+    doc.setFont('helvetica', 'bold').setFontSize(8.5).setTextColor(...MUTE)
+    doc.text('Remark :', L, wy)
+    doc.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(...INK)
+    const remarkLines = doc.splitTextToSize(inv.notes, R - L - 24) as string[]
+    doc.text(remarkLines, L + 22, wy)
+    wy += Math.max(remarkLines.length * 4.5, 6) + 4
+  }
+
   // ---- Notes ----
-  let ny = ty + 30
+  let ny = wy + 4
   doc.setDrawColor(...HAIR).setLineWidth(0.2).line(L, ny - 4, R, ny - 4)
   doc.setFont('helvetica', 'bold').setFontSize(7.5).setTextColor(...MUTE)
   doc.text('PAYMENT', L, ny)

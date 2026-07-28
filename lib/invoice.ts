@@ -35,6 +35,7 @@ export type Invoice = {
   discount_total: number
   total: number
   amount_in_words: string
+  notes?: string
   items: InvoiceItem[]
 }
 

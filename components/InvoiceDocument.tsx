@@ -87,12 +87,8 @@ export default function InvoiceDocument({ invoice }: { invoice: Invoice }) {
       {/* Spacer — pushes footer to bottom of A4 */}
       <div className="inv-spacer" />
 
-      {/* Totals */}
-      <div className="inv-foot">
-        <div className="inv-words">
-          <div className="inv-cap2">Amount in Words</div>
-          <div className="inv-wval">{inv.amount_in_words}</div>
-        </div>
+      {/* Totals — right aligned */}
+      <div className="inv-totals-wrap">
         <div className="inv-totbox">
           <div className="inv-totrow"><span>Subtotal</span><span className="n">RM {money(inv.subtotal)}</span></div>
           <div className="inv-totrow"><span>Discount</span><span className="n">RM {money(inv.discount_total)}</span></div>
@@ -102,6 +98,20 @@ export default function InvoiceDocument({ invoice }: { invoice: Invoice }) {
           </div>
         </div>
       </div>
+
+      {/* Amount in Words — no box */}
+      <div className="inv-words">
+        <span className="inv-wlabel">Amount in Words : </span>
+        <span className="inv-wval">{inv.amount_in_words}</span>
+      </div>
+
+      {/* Remark */}
+      {inv.notes && (
+        <div className="inv-remark">
+          <span className="inv-wlabel">Remark : </span>
+          <span>{inv.notes}</span>
+        </div>
+      )}
 
       {/* Notes */}
       <div className="inv-notes">
@@ -167,10 +177,12 @@ table.inv-items td.desc .code { color:var(--ink-soft); font-size:11.5px; margin-
 table.inv-items td.desc .pack { display:inline-block; margin-top:4px; font-size:10px; letter-spacing:.04em; color:var(--ink-mute); font-family:ui-monospace,Menlo,monospace; border:1px solid var(--hair); border-radius:3px; padding:1px 5px; }
 table.inv-items td.item { color:var(--ink-mute); font-variant-numeric:tabular-nums; }
 table.inv-items td.tax { color:var(--ink-mute); font-size:11px; }
-.inv-foot { display:grid; grid-template-columns:1fr 260px; gap:18px; margin-top:14px; align-items:start; }
-.inv-words { border:1px solid var(--rule); padding:9px 12px; min-height:54px; }
+.inv-totals-wrap { display:flex; justify-content:flex-end; margin-top:14px; }
 .inv-cap2 { font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-mute); }
-.inv-wval { font-size:11.5px; font-weight:600; margin-top:3px; line-height:1.5; }
+.inv-words { margin-top:10px; font-size:11.5px; line-height:1.6; }
+.inv-wlabel { font-weight:700; color:var(--ink-mute); font-size:10.5px; margin-right:4px; }
+.inv-wval { font-weight:600; }
+.inv-remark { margin-top:5px; font-size:11.5px; line-height:1.6; }
 .inv-totrow { display:flex; justify-content:space-between; align-items:baseline; font-size:12px; padding:4px 2px; color:var(--ink-soft); }
 .inv-totrow .n { font-variant-numeric:tabular-nums; }
 .inv-grand { display:flex; justify-content:space-between; align-items:baseline; margin-top:6px; padding:10px 12px; background:var(--total-bg); border:1.5px solid var(--brand); border-radius:4px; }
