@@ -46,7 +46,6 @@ export default function InvoiceDocument({ invoice }: { invoice: Invoice }) {
           <table>
             <tbody>
               <tr><td className="k">Your Ref</td><td className="c">:</td><td className="v">{inv.your_ref || '—'}</td></tr>
-              <tr><td className="k">Branch Name</td><td className="c">:</td><td className="v">{inv.branch_name || '—'}</td></tr>
               <tr><td className="k">Terms</td><td className="c">:</td><td className="v">{inv.terms || '—'}</td></tr>
               <tr><td className="k">Date</td><td className="c">:</td><td className="v">{fmtDate(inv.invoice_date)}</td></tr>
               <tr><td className="k">Page</td><td className="c">:</td><td className="v">1 of 1</td></tr>

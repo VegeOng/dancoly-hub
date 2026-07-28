@@ -33,6 +33,12 @@ type ListRow = {
 const num = (s: string) => parseFloat(s) || 0
 const lineTotal = (it: FormItem) => num(it.qty) * num(it.unit_price) - num(it.discount)
 
+const blankForm = () => ({
+  bill_to_name: '', bill_to_address: '', bill_to_tel: '', bill_to_fax: '',
+  your_ref: '', terms: DEFAULT_TERMS,
+  invoice_date: new Date().toISOString().slice(0, 10),
+})
+
 export default function Orders() {
   const [view, setView] = useState<'list' | 'form' | 'invoice'>('list')
   const [rows, setRows] = useState<ListRow[]>([])
@@ -41,11 +47,11 @@ export default function Orders() {
   const [saving, setSaving] = useState(false)
   const [current, setCurrent] = useState<Invoice | null>(null)
 
-  const [form, setForm] = useState({
-    bill_to_name: '', bill_to_address: '', bill_to_tel: '', bill_to_fax: '',
-    your_ref: '', branch_name: '', terms: DEFAULT_TERMS,
-    invoice_date: new Date().toISOString().slice(0, 10),
-  })
+  // edit mode
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingNo, setEditingNo] = useState<number | null>(null)
+
+  const [form, setForm] = useState(blankForm())
   const [items, setItems] = useState<FormItem[]>([blankItem()])
 
   useEffect(() => { loadList() }, [])
@@ -79,55 +85,73 @@ export default function Orders() {
   const removeItem = (i: number) => setItems(prev => prev.filter((_, idx) => idx !== i))
 
   function resetForm() {
-    setForm({
-      bill_to_name: '', bill_to_address: '', bill_to_tel: '', bill_to_fax: '',
-      your_ref: '', branch_name: '', terms: DEFAULT_TERMS,
-      invoice_date: new Date().toISOString().slice(0, 10),
-    })
+    setForm(blankForm())
     setItems([blankItem()])
+    setEditingId(null)
+    setEditingNo(null)
   }
 
   async function saveInvoice() {
-    if (!form.bill_to_name.trim()) return alert('请填写买方名称 (Bill To)')
+    if (!form.bill_to_name.trim()) return alert('Please fill in Bill To name')
     const valid = items.filter(it => it.description.trim())
-    if (valid.length === 0) return alert('请至少填写一项商品')
+    if (valid.length === 0) return alert('Please add at least one item')
 
     setSaving(true)
     try {
       const words = amountInWords(total)
-      const { data: inv, error } = await supabase.from('invoices').insert({
+      const payload = {
         bill_to_name: form.bill_to_name.trim(),
         bill_to_address: form.bill_to_address.trim(),
         bill_to_tel: form.bill_to_tel.trim(),
         bill_to_fax: form.bill_to_fax.trim(),
         your_ref: form.your_ref.trim(),
-        branch_name: form.branch_name.trim(),
         terms: form.terms.trim(),
         invoice_date: form.invoice_date,
         subtotal, discount_total: discountTotal, total,
         amount_in_words: words,
-      }).select().single()
-      if (error) throw error
+      }
 
-      const payload = valid.map((it, i) => ({
-        invoice_id: inv.id, line_no: i + 1,
+      let invId: string
+      let invNo: number
+
+      if (editingId) {
+        // UPDATE existing invoice
+        const { error } = await supabase.from('invoices').update(payload).eq('id', editingId)
+        if (error) throw error
+        invId = editingId
+        invNo = editingNo!
+        // replace all items
+        await supabase.from('invoice_items').delete().eq('invoice_id', editingId)
+      } else {
+        // INSERT new invoice
+        const { data: inv, error } = await supabase.from('invoices').insert(payload).select().single()
+        if (error) throw error
+        invId = inv.id
+        invNo = inv.invoice_no
+      }
+
+      const itemsPayload = valid.map((it, i) => ({
+        invoice_id: invId, line_no: i + 1,
         description: it.description.trim(), product_code: it.product_code.trim(),
         qty: num(it.qty), uom: it.uom,
         unit_price: num(it.unit_price), discount: num(it.discount), line_total: lineTotal(it),
       }))
-      const { error: itemsError } = await supabase.from('invoice_items').insert(payload)
+      const { error: itemsError } = await supabase.from('invoice_items').insert(itemsPayload)
       if (itemsError) throw itemsError
 
       const built: Invoice = {
-        ...inv,
-        items: payload.map(p => ({ ...p } as InvoiceItem)),
+        id: invId,
+        invoice_no: invNo,
+        invoice_date: form.invoice_date,
+        ...payload,
+        items: itemsPayload.map(p => ({ ...p } as InvoiceItem)),
       }
       setCurrent(built)
       setView('invoice')
       resetForm()
       loadList()
     } catch (err) {
-      alert(err instanceof Error ? err.message : '保存发票失败,请重试')
+      alert(err instanceof Error ? err.message : '保存发票失败，请重试')
     } finally {
       setSaving(false)
     }
@@ -147,6 +171,43 @@ export default function Orders() {
     }
   }
 
+  async function openEdit(id: string) {
+    try {
+      const { data: inv, error } = await supabase.from('invoices').select('*').eq('id', id).single()
+      if (error) throw error
+      const { data: its, error: e2 } = await supabase
+        .from('invoice_items').select('*').eq('invoice_id', id).order('line_no')
+      if (e2) throw e2
+
+      setForm({
+        bill_to_name: inv.bill_to_name || '',
+        bill_to_address: inv.bill_to_address || '',
+        bill_to_tel: inv.bill_to_tel || '',
+        bill_to_fax: inv.bill_to_fax || '',
+        your_ref: inv.your_ref || '',
+        terms: inv.terms || DEFAULT_TERMS,
+        invoice_date: inv.invoice_date || new Date().toISOString().slice(0, 10),
+      })
+      setItems(
+        (its || []).length > 0
+          ? (its || []).map(it => ({
+              description: it.description || '',
+              product_code: it.product_code || '',
+              qty: String(it.qty ?? 1),
+              uom: it.uom || 'UNIT',
+              unit_price: String(it.unit_price ?? 0),
+              discount: String(it.discount ?? 0),
+            }))
+          : [blankItem()]
+      )
+      setEditingId(id)
+      setEditingNo(inv.invoice_no)
+      setView('form')
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '无法加载发票')
+    }
+  }
+
   // ---------- Invoice view ----------
   if (view === 'invoice' && current) {
     return (
@@ -157,6 +218,12 @@ export default function Orders() {
           </button>
           <button onClick={() => window.print()} className="border border-amber-600 text-amber-700 hover:bg-amber-50 px-5 py-2 rounded-lg text-sm font-medium">
             🖨 Print
+          </button>
+          <button
+            onClick={() => current && openEdit(current.id!)}
+            className="border border-gray-400 text-gray-700 hover:bg-gray-50 px-5 py-2 rounded-lg text-sm font-medium"
+          >
+            ✎ Edit
           </button>
           <button onClick={() => { setCurrent(null); setView('list') }} className="border border-gray-300 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm">
             ← Back to list
@@ -172,7 +239,9 @@ export default function Orders() {
     return (
       <main className="max-w-4xl mx-auto p-6">
         <div className="flex items-center justify-between mb-5">
-          <h1 className="text-2xl font-bold">New Invoice</h1>
+          <h1 className="text-2xl font-bold">
+            {editingId ? `Edit Invoice #${editingNo}` : 'New Invoice'}
+          </h1>
           <button onClick={() => { resetForm(); setView('list') }} className="text-sm text-gray-500 hover:text-gray-800">✕ Cancel</button>
         </div>
 
@@ -197,11 +266,8 @@ export default function Orders() {
                 <label className="text-xs text-gray-500">Terms
                   <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full mt-1" value={form.terms} onChange={e => setForm({ ...form, terms: e.target.value })} />
                 </label>
-                <label className="text-xs text-gray-500">Your Ref
+                <label className="text-xs text-gray-500 col-span-2">Your Ref
                   <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full mt-1" value={form.your_ref} onChange={e => setForm({ ...form, your_ref: e.target.value })} />
-                </label>
-                <label className="text-xs text-gray-500">Branch Name
-                  <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full mt-1" value={form.branch_name} onChange={e => setForm({ ...form, branch_name: e.target.value })} />
                 </label>
               </div>
             </div>
@@ -259,7 +325,7 @@ export default function Orders() {
 
           <div className="flex gap-2 pt-1">
             <button onClick={saveInvoice} disabled={saving} className="bg-amber-600 hover:bg-amber-700 text-white px-6 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50">
-              {saving ? 'Saving…' : 'Create Invoice'}
+              {saving ? 'Saving…' : editingId ? 'Save Changes' : 'Create Invoice'}
             </button>
             <button onClick={() => { resetForm(); setView('list') }} className="border border-gray-300 px-4 py-2.5 rounded-lg text-sm">Cancel</button>
           </div>
@@ -288,7 +354,7 @@ export default function Orders() {
             <button onClick={loadList} className="border border-gray-200 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm">重试</button>
           </div>
         ) : rows.length === 0 ? (
-          <p className="text-center text-gray-400 py-10 text-sm">还没有发票。点右上角「+ New Invoice」开第一张。</p>
+          <p className="text-center text-gray-400 py-10 text-sm">No invoices yet. Click "+ New Invoice" to create one.</p>
         ) : (
           <table className="w-full text-sm">
             <thead>
@@ -308,7 +374,10 @@ export default function Orders() {
                   <td className="py-2.5 font-medium">{r.bill_to_name}</td>
                   <td className="py-2.5 text-right tabular-nums font-semibold text-amber-700">{money(r.total)}</td>
                   <td className="py-2.5 text-right">
-                    <button onClick={() => openInvoice(r.id)} className="text-amber-600 hover:text-amber-800 font-medium">View / Print →</button>
+                    <div className="flex gap-3 justify-end">
+                      <button onClick={() => openInvoice(r.id)} className="text-amber-600 hover:text-amber-800 font-medium">View →</button>
+                      <button onClick={() => openEdit(r.id)} className="text-gray-500 hover:text-gray-800 font-medium">✎ Edit</button>
+                    </div>
                   </td>
                 </tr>
               ))}

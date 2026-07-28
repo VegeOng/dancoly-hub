@@ -66,7 +66,6 @@ export function downloadInvoicePdf(inv: Invoice) {
   const mx = 118
   const rows: [string, string][] = [
     ['Your Ref', inv.your_ref || '-'],
-    ['Branch Name', inv.branch_name || '-'],
     ['Terms', inv.terms || '-'],
     ['Date', fmtDate(inv.invoice_date)],
     ['Page', '1 of 1'],
