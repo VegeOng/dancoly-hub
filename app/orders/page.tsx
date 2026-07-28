@@ -142,7 +142,6 @@ export default function Orders() {
       const built: Invoice = {
         id: invId,
         invoice_no: invNo,
-        invoice_date: form.invoice_date,
         ...payload,
         items: itemsPayload.map(p => ({ ...p } as InvoiceItem)),
       }
