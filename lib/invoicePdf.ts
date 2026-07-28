@@ -65,7 +65,6 @@ export function downloadInvoicePdf(inv: Invoice) {
   // meta right
   const mx = 118
   const rows: [string, string][] = [
-    ['Your Ref', inv.your_ref || '-'],
     ['Terms', inv.terms || '-'],
     ['Date', fmtDate(inv.invoice_date)],
     ['Page', '1 of 1'],
@@ -109,10 +108,10 @@ export function downloadInvoicePdf(inv: Invoice) {
     },
   })
 
-  // ---- Totals ----
+  // ---- Totals — footer always near bottom of A4 ----
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const finalY = (doc as any).lastAutoTable.finalY as number
-  let ty = finalY + 6
+  let ty = Math.max(finalY + 6, 195)
 
   // amount in words box (left)
   doc.setDrawColor(...INK).setLineWidth(0.3).rect(L, ty, 100, 18)

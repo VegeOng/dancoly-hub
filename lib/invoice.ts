@@ -30,7 +30,6 @@ export type Invoice = {
   bill_to_address: string
   bill_to_tel: string
   bill_to_fax: string
-  your_ref: string
   terms: string
   subtotal: number
   discount_total: number

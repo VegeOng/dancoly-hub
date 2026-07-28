@@ -45,7 +45,6 @@ export default function InvoiceDocument({ invoice }: { invoice: Invoice }) {
         <div className="inv-docmeta">
           <table>
             <tbody>
-              <tr><td className="k">Your Ref</td><td className="c">:</td><td className="v">{inv.your_ref || '—'}</td></tr>
               <tr><td className="k">Terms</td><td className="c">:</td><td className="v">{inv.terms || '—'}</td></tr>
               <tr><td className="k">Date</td><td className="c">:</td><td className="v">{fmtDate(inv.invoice_date)}</td></tr>
               <tr><td className="k">Page</td><td className="c">:</td><td className="v">1 of 1</td></tr>
@@ -84,6 +83,9 @@ export default function InvoiceDocument({ invoice }: { invoice: Invoice }) {
           ))}
         </tbody>
       </table>
+
+      {/* Spacer — pushes footer to bottom of A4 */}
+      <div className="inv-spacer" />
 
       {/* Totals */}
       <div className="inv-foot">
@@ -124,11 +126,13 @@ const INVOICE_CSS = `
 .inv-sheet {
   --ink:#1a1a1a; --ink-soft:#565248; --ink-mute:#8a8479; --rule:#2a2a2a;
   --hair:#d9d5cd; --brand:#b8860b; --brand-deep:#8c6608; --total-bg:#faf6ec; --paper:#fff;
-  width:210mm; max-width:100%; min-height:297mm; margin:0 auto;
+  width:210mm; max-width:100%; height:297mm; margin:0 auto;
   background:var(--paper); color:var(--ink); padding:15mm 15mm 12mm;
   box-shadow:0 2px 4px rgba(40,34,20,.06),0 18px 50px rgba(40,34,20,.14);
   font-family:system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
+  display:flex; flex-direction:column;
 }
+.inv-spacer { flex:1; }
 .inv-sheet * { box-sizing:border-box; }
 .inv-head { display:block; }
 .inv-company { text-align:center; }

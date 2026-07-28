@@ -35,7 +35,7 @@ const lineTotal = (it: FormItem) => num(it.qty) * num(it.unit_price) - num(it.di
 
 const blankForm = () => ({
   bill_to_name: '', bill_to_address: '', bill_to_tel: '', bill_to_fax: '',
-  your_ref: '', terms: DEFAULT_TERMS,
+  terms: DEFAULT_TERMS,
   invoice_date: new Date().toISOString().slice(0, 10),
 })
 
@@ -104,7 +104,6 @@ export default function Orders() {
         bill_to_address: form.bill_to_address.trim(),
         bill_to_tel: form.bill_to_tel.trim(),
         bill_to_fax: form.bill_to_fax.trim(),
-        your_ref: form.your_ref.trim(),
         terms: form.terms.trim(),
         invoice_date: form.invoice_date,
         subtotal, discount_total: discountTotal, total,
@@ -183,7 +182,6 @@ export default function Orders() {
         bill_to_address: inv.bill_to_address || '',
         bill_to_tel: inv.bill_to_tel || '',
         bill_to_fax: inv.bill_to_fax || '',
-        your_ref: inv.your_ref || '',
         terms: inv.terms || DEFAULT_TERMS,
         invoice_date: inv.invoice_date || new Date().toISOString().slice(0, 10),
       })
@@ -262,11 +260,8 @@ export default function Orders() {
                 <label className="text-xs text-gray-500">Date
                   <input type="date" className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full mt-1" value={form.invoice_date} onChange={e => setForm({ ...form, invoice_date: e.target.value })} />
                 </label>
-                <label className="text-xs text-gray-500">Terms
+                <label className="text-xs text-gray-500 col-span-2">Terms
                   <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full mt-1" value={form.terms} onChange={e => setForm({ ...form, terms: e.target.value })} />
-                </label>
-                <label className="text-xs text-gray-500 col-span-2">Your Ref
-                  <input className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full mt-1" value={form.your_ref} onChange={e => setForm({ ...form, your_ref: e.target.value })} />
                 </label>
               </div>
             </div>
