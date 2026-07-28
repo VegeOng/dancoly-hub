@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import InvoiceDocument from '@/components/InvoiceDocument'
+import { downloadInvoicePdf } from '@/lib/invoicePdf'
 import {
   amountInWords, money, DEFAULT_TERMS, UOM_OPTIONS,
   type Invoice, type InvoiceItem,
@@ -150,9 +151,12 @@ export default function Orders() {
   if (view === 'invoice' && current) {
     return (
       <main className="max-w-5xl mx-auto p-6">
-        <div className="inv-noprint flex gap-3 mb-4">
-          <button onClick={() => window.print()} className="bg-amber-600 hover:bg-amber-700 text-white px-5 py-2 rounded-lg text-sm font-medium">
-            🖨 Print / Save PDF
+        <div className="inv-noprint flex flex-wrap gap-3 mb-4">
+          <button onClick={() => current && downloadInvoicePdf(current)} className="bg-amber-600 hover:bg-amber-700 text-white px-5 py-2 rounded-lg text-sm font-medium">
+            ⬇ Download PDF
+          </button>
+          <button onClick={() => window.print()} className="border border-amber-600 text-amber-700 hover:bg-amber-50 px-5 py-2 rounded-lg text-sm font-medium">
+            🖨 Print
           </button>
           <button onClick={() => { setCurrent(null); setView('list') }} className="border border-gray-300 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm">
             ← Back to list
