@@ -72,10 +72,7 @@ export async function POST(request: Request) {
     return Response.json({
       url: `${API_BASE}${tiktok_path}?${qs}`,
       method: tiktok_method.toUpperCase(),
-      headers: {
-        'Content-Type': 'application/json',
-        'x-tts-access-token': access_token,
-      },
+      access_token,
       body: body_params,
     })
   } catch (err) {
