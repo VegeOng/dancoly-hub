@@ -45,5 +45,15 @@ export async function GET() {
     steps.active_connection = null
   }
 
+  // Step 4: can we reach TikTok's API host?
+  try {
+    const r = await fetch('https://open-api.tiktok-shop.com/', {
+      signal: AbortSignal.timeout(5000),
+    })
+    steps.tiktok_host_reachable = { status: r.status }
+  } catch (e) {
+    steps.tiktok_host_reachable = { error: e instanceof Error ? `${e.name}: ${e.message}` : String(e) }
+  }
+
   return Response.json(steps)
 }
