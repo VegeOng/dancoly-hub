@@ -52,7 +52,24 @@ export async function GET() {
     })
     steps.tiktok_host_reachable = { status: r.status }
   } catch (e) {
-    steps.tiktok_host_reachable = { error: e instanceof Error ? `${e.name}: ${e.message}` : String(e) }
+    const err = e instanceof Error ? e : new Error(String(e))
+    const cause = (err as NodeJS.ErrnoException).cause as Error | undefined
+    steps.tiktok_host_reachable = {
+      error: `${err.name}: ${err.message}`,
+      cause: cause ? `${cause.name}: ${cause.message}` : undefined,
+      code: (cause as NodeJS.ErrnoException)?.code,
+    }
+  }
+
+  // Step 5: can we reach auth.tiktok-shops.com?
+  try {
+    const r = await fetch('https://auth.tiktok-shops.com/', {
+      signal: AbortSignal.timeout(5000),
+    })
+    steps.auth_host_reachable = { status: r.status }
+  } catch (e) {
+    const err = e instanceof Error ? e : new Error(String(e))
+    steps.auth_host_reachable = { error: `${err.name}: ${err.message}` }
   }
 
   return Response.json(steps)
