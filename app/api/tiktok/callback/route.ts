@@ -6,6 +6,16 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://dancoly-hub.vercel.a
 
 // GET /api/tiktok/callback?code=xxx&state=xxx
 export async function GET(request: NextRequest) {
+  try {
+    return await handleCallback(request)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('TikTok callback fatal:', err)
+    return htmlPage('TikTok 连接出现错误', [`错误详情：${msg}`, '请截图后联系技术支持。'])
+  }
+}
+
+async function handleCallback(request: NextRequest) {
   // ── 0. Env check ───────────────────────────────────────────────────────
   const missing = missingTikTokConfig()
   if (missing.length) {
