@@ -11,6 +11,7 @@ type Connection = {
 }
 
 type SyncResult = { synced: number; items: number; total_found: number }
+type SheetSyncResult = { synced: number; total_rows: number }
 
 function IntegrationsContent() {
   const searchParams = useSearchParams()
@@ -18,6 +19,40 @@ function IntegrationsContent() {
   const connectError = searchParams.get('error')
 
   const [conn, setConn] = useState<Connection | null | undefined>(undefined)
+
+  // ── Google Sheets state ──────────────────────────────────────────────
+  const [sheetUrl, setSheetUrl] = useState('')
+  const [sheetSyncing, setSheetSyncing] = useState(false)
+  const [sheetResult, setSheetResult] = useState<SheetSyncResult | null>(null)
+  const [sheetError, setSheetError] = useState<string | null>(null)
+
+  // Persist sheet URL in localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('tiktok_sheet_url')
+    if (saved) setSheetUrl(saved)
+  }, [])
+
+  async function syncFromSheet() {
+    if (!sheetUrl.trim()) return
+    localStorage.setItem('tiktok_sheet_url', sheetUrl.trim())
+    setSheetSyncing(true)
+    setSheetResult(null)
+    setSheetError(null)
+    try {
+      const res = await fetch('/api/sheets/sync-orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sheetUrl: sheetUrl.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? `错误 ${res.status}`)
+      setSheetResult(data)
+    } catch (err) {
+      setSheetError(err instanceof Error ? err.message : '同步失败')
+    } finally {
+      setSheetSyncing(false)
+    }
+  }
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null)
   const [syncError, setSyncError] = useState<string | null>(null)
@@ -163,6 +198,60 @@ function IntegrationsContent() {
         <section className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm opacity-60">
           <h2 className="font-semibold text-lg">Meta Ads</h2>
           <p className="text-sm text-gray-500 mt-1">之后可连接 Facebook / Instagram 广告花费、ROAS 和投流表现。</p>
+        </section>
+
+        {/* ── Google Sheets Sync ── */}
+        <section className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm md:col-span-2">
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <div>
+              <h2 className="font-semibold text-lg">📊 Google Sheet 同步订单</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                用 Zapier / Make 把 TikTok 订单自动写入 Google Sheet，再点这里同步进系统。
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Google Sheet 链接（需设置为「任何人可查看」）</label>
+              <input
+                type="url"
+                value={sheetUrl}
+                onChange={e => setSheetUrl(e.target.value)}
+                placeholder="https://docs.google.com/spreadsheets/d/..."
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300"
+              />
+            </div>
+
+            {sheetResult && (
+              <div className="bg-blue-50 rounded-lg px-4 py-3 text-sm text-blue-800">
+                ✅ 同步完成：共 {sheetResult.total_rows} 行，写入 {sheetResult.synced} 笔订单
+              </div>
+            )}
+            {sheetError && (
+              <div className="bg-red-50 rounded-lg px-4 py-3 text-sm text-red-700">⚠️ {sheetError}</div>
+            )}
+
+            <button
+              onClick={syncFromSheet}
+              disabled={sheetSyncing || !sheetUrl.trim()}
+              className="bg-black hover:bg-gray-800 text-white px-5 py-2 rounded-lg text-sm font-medium disabled:opacity-40"
+            >
+              {sheetSyncing ? '同步中…' : '从 Google Sheet 同步'}
+            </button>
+
+            <details className="text-xs text-gray-400 cursor-pointer">
+              <summary className="hover:text-gray-600">查看 Zapier / Make 列名模板</summary>
+              <div className="mt-2 bg-gray-50 rounded-lg p-3 font-mono text-xs leading-6 break-all">
+                order_id, status, created_at, paid_at, total_amount, subtotal,
+                shipping_fee, platform_discount, seller_discount, currency,
+                payment_method, tracking_number, shipping_provider,
+                recipient_name, recipient_phone, shipping_address,
+                buyer_uid, buyer_message
+              </div>
+              <p className="mt-1">在 Zapier / Make 中，把 TikTok 字段映射到以上列名，Sheet 第一行必须是列名。</p>
+            </details>
+          </div>
         </section>
 
       </div>
