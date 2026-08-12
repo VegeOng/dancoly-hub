@@ -45,9 +45,10 @@ function IntegrationsContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ days: 30 }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? '同步失败')
-      setSyncResult(data)
+      let data: Record<string, unknown> = {}
+      try { data = await res.json() } catch { /* empty body — likely timeout */ }
+      if (!res.ok) throw new Error((data.error as string) ?? `服务器错误 ${res.status}，请稍后重试`)
+      setSyncResult(data as unknown as SyncResult)
       loadConn()
     } catch (err) {
       setSyncError(err instanceof Error ? err.message : '同步出错')

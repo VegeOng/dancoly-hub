@@ -1,6 +1,8 @@
 import { tiktokFetch, refreshAccessToken, type TikTokOrder } from '@/lib/tiktok'
 import { supabase } from '@/lib/supabase'
 
+export const maxDuration = 60
+
 // POST /api/tiktok/sync-orders
 // Body (optional): { days?: number }  — how many past days to pull (default 30)
 export async function POST(request: Request) {
