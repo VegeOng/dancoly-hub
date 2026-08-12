@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
@@ -12,12 +12,12 @@ type Connection = {
 
 type SyncResult = { synced: number; items: number; total_found: number }
 
-export default function IntegrationsPage() {
+function IntegrationsContent() {
   const searchParams = useSearchParams()
   const justConnected = searchParams.get('connected') === 'true'
   const connectError = searchParams.get('error')
 
-  const [conn, setConn] = useState<Connection | null | undefined>(undefined) // undefined = loading
+  const [conn, setConn] = useState<Connection | null | undefined>(undefined)
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null)
   const [syncError, setSyncError] = useState<string | null>(null)
@@ -166,5 +166,13 @@ export default function IntegrationsPage() {
 
       </div>
     </main>
+  )
+}
+
+export default function IntegrationsPage() {
+  return (
+    <Suspense fallback={<div className="max-w-5xl mx-auto p-6 text-gray-400">加载中…</div>}>
+      <IntegrationsContent />
+    </Suspense>
   )
 }
