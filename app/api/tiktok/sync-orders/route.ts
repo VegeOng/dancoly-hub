@@ -4,6 +4,16 @@ import { supabase } from '@/lib/supabase'
 // POST /api/tiktok/sync-orders
 // Body (optional): { days?: number }  — how many past days to pull (default 30)
 export async function POST(request: Request) {
+  try {
+    return await syncOrders(request)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('sync-orders fatal:', err)
+    return Response.json({ error: msg }, { status: 500 })
+  }
+}
+
+async function syncOrders(request: Request) {
   // ── 0. Options ────────────────────────────────────────────────────────
   let days = 30
   try {
