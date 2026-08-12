@@ -1,5 +1,3 @@
-import crypto from 'crypto'
-
 // ── Config (env vars) ────────────────────────────────────────────────────────
 
 export function getTikTokConfig() {
@@ -97,8 +95,9 @@ export type TikTokOrder = {
  * base = {appSecret}{/path}{sortedKey1}{val1}{sortedKey2}{val2}...{appSecret}
  * sign = SHA256(base).hex().uppercase()
  * Params must exclude `sign` and `access_token`.
+ * Uses Web Crypto API so it works in both Node.js and Edge Runtime.
  */
-export function generateSign(path: string, params: Record<string, string>): string {
+export async function generateSign(path: string, params: Record<string, string>): Promise<string> {
   const { sign: _s, access_token: _a, ...rest } = params
   const sorted = Object.keys(rest)
     .sort()
@@ -106,7 +105,11 @@ export function generateSign(path: string, params: Record<string, string>): stri
     .join('')
   const { appSecret } = getTikTokConfig()
   const base = appSecret + path + sorted + appSecret
-  return crypto.createHash('sha256').update(base).digest('hex').toUpperCase()
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(base))
+  return Array.from(new Uint8Array(buf))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase()
 }
 
 // ── Request helpers ──────────────────────────────────────────────────────────
@@ -116,12 +119,12 @@ const AUTH_BASE = 'https://auth.tiktok-shops.com'
 
 type ApiParams = Record<string, string | number>
 
-function buildSignedUrl(
+async function buildSignedUrl(
   path: string,
   extra: ApiParams = {},
   accessToken: string,
   shopId?: string,
-): string {
+): Promise<string> {
   const { appKey } = getTikTokConfig()
   const params: Record<string, string> = {
     app_key: appKey,
@@ -129,7 +132,7 @@ function buildSignedUrl(
     ...Object.fromEntries(Object.entries(extra).map(([k, v]) => [k, String(v)])),
   }
   if (shopId) params.shop_id = shopId
-  const sign = generateSign(path, params)
+  const sign = await generateSign(path, params)
   const qs = new URLSearchParams({ ...params, sign, access_token: accessToken }).toString()
   return `${API_BASE}${path}?${qs}`
 }
@@ -143,7 +146,7 @@ export async function tiktokFetch<T = unknown>(
   params: ApiParams = {},
   body?: object,
 ): Promise<T> {
-  const url = buildSignedUrl(path, params, accessToken, shopId)
+  const url = await buildSignedUrl(path, params, accessToken, shopId)
   const res = await fetch(url, {
     method,
     headers: {
