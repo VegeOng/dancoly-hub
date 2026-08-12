@@ -67,12 +67,22 @@ async function syncOrders(request: Request) {
     data: { orders: Array<{ id: string }>; total_count: number; next_page_token?: string }
   }
 
-  const searchRes = await tiktokFetch<OrderSearchResponse>(
-    'POST', '/order/202309/orders/search', access_token, shopId, {},
-    { page_size: 50, sort_field: 'create_time', sort_order: 'DESC', create_time_ge: since, create_time_lt: now },
-  )
+  let searchRes: OrderSearchResponse
+  try {
+    searchRes = await tiktokFetch<OrderSearchResponse>(
+      'POST', '/order/202309/orders/search', access_token, shopId, {},
+      { page_size: 50, sort_field: 'create_time', sort_order: 'DESC', create_time_ge: since, create_time_lt: now },
+    )
+  } catch (e) {
+    return Response.json({
+      error: 'TikTok API unreachable',
+      detail: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+      shop_id: shopId,
+      token_prefix: access_token.slice(0, 8),
+    }, { status: 502 })
+  }
   if (searchRes.code !== 0) {
-    return Response.json({ error: 'Order search failed', detail: searchRes.message }, { status: 502 })
+    return Response.json({ error: 'Order search failed', code: searchRes.code, detail: searchRes.message }, { status: 502 })
   }
   const allOrderIds = (searchRes.data?.orders ?? []).map(o => o.id)
   const totalFound = searchRes.data?.total_count ?? allOrderIds.length
