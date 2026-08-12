@@ -61,29 +61,21 @@ async function syncOrders(request: Request) {
   const now = Math.floor(Date.now() / 1000)
   const since = now - days * 86_400
 
-  // ── 3. Search orders (paginated) ──────────────────────────────────────
+  // ── 3. Search orders (single page only — avoid serverless timeout) ───
   type OrderSearchResponse = {
     code: number; message: string
     data: { orders: Array<{ id: string }>; total_count: number; next_page_token?: string }
   }
 
-  const allOrderIds: string[] = []
-  let pageToken: string | undefined
-
-  do {
-    const body: Record<string, unknown> = {
-      page_size: 50, sort_field: 'create_time', sort_order: 'DESC',
-      create_time_ge: since, create_time_lt: now,
-    }
-    if (pageToken) body.page_token = pageToken
-
-    const res = await tiktokFetch<OrderSearchResponse>('POST', '/order/202309/orders/search', access_token, shopId, {}, body)
-    if (res.code !== 0) {
-      return Response.json({ error: 'Order search failed', detail: res.message }, { status: 502 })
-    }
-    allOrderIds.push(...(res.data?.orders ?? []).map(o => o.id))
-    pageToken = res.data?.next_page_token
-  } while (pageToken)
+  const searchRes = await tiktokFetch<OrderSearchResponse>(
+    'POST', '/order/202309/orders/search', access_token, shopId, {},
+    { page_size: 50, sort_field: 'create_time', sort_order: 'DESC', create_time_ge: since, create_time_lt: now },
+  )
+  if (searchRes.code !== 0) {
+    return Response.json({ error: 'Order search failed', detail: searchRes.message }, { status: 502 })
+  }
+  const allOrderIds = (searchRes.data?.orders ?? []).map(o => o.id)
+  const totalFound = searchRes.data?.total_count ?? allOrderIds.length
 
   if (allOrderIds.length === 0) {
     await supabase.from('tiktok_connections').update({ last_synced_at: new Date().toISOString() }).eq('id', conn.id)
@@ -178,5 +170,5 @@ async function syncOrders(request: Request) {
 
   await supabase.from('tiktok_connections').update({ last_synced_at: new Date().toISOString() }).eq('id', conn.id)
 
-  return Response.json({ synced: upsertedOrders, items: upsertedItems, total_found: allOrderIds.length, days_window: days })
+  return Response.json({ synced: upsertedOrders, items: upsertedItems, total_found: totalFound, days_window: days })
 }
