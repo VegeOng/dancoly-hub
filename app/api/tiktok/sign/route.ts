@@ -13,11 +13,24 @@ export async function POST(request: Request) {
       tiktok_path,
       query_params = {},
       body_params = null,
+      days_back = null,
     } = (await request.json()) as {
       tiktok_method?: string
       tiktok_path: string
       query_params?: Record<string, string | number>
       body_params?: Record<string, unknown> | null
+      days_back?: number | null
+    }
+
+    // Auto-calculate timestamp range when days_back is provided
+    let finalBodyParams = body_params
+    if (days_back && typeof days_back === 'number') {
+      const now = Math.floor(Date.now() / 1000)
+      finalBodyParams = {
+        ...body_params,
+        create_time_ge: now - days_back * 86400,
+        create_time_lt: now,
+      }
     }
 
     if (!tiktok_path) {
@@ -73,7 +86,7 @@ export async function POST(request: Request) {
       url: `${API_BASE}${tiktok_path}?${qs}`,
       method: tiktok_method.toUpperCase(),
       access_token,
-      body: body_params,
+      body: finalBodyParams,
     })
   } catch (err) {
     return Response.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 })
