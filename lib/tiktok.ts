@@ -161,16 +161,13 @@ export async function tiktokFetch<T = unknown>(
 /** Exchange authorization code for access + refresh tokens. */
 export async function exchangeCodeForToken(authCode: string): Promise<TikTokTokenResponse> {
   const { appKey, appSecret, tokenUrl } = getTikTokConfig()
-  const res = await fetch(tokenUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      app_key: appKey,
-      app_secret: appSecret,
-      auth_code: authCode,
-      grant_type: 'authorized_code',
-    }),
-  })
+  // TikTok token API expects query-string params, not JSON body
+  const url = new URL(tokenUrl)
+  url.searchParams.set('app_key', appKey)
+  url.searchParams.set('app_secret', appSecret)
+  url.searchParams.set('auth_code', authCode)
+  url.searchParams.set('grant_type', 'authorized_code')
+  const res = await fetch(url.toString(), { cache: 'no-store' })
   return res.json()
 }
 
