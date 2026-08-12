@@ -17,7 +17,6 @@ export default function Dashboard() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({
     name: '', phone: '', email: '',
@@ -33,36 +32,25 @@ export default function Dashboard() {
 
   async function loadCustomers() {
     setLoading(true)
-    setLoadError(null)
-    try {
-      const { data, error } = await supabase
-        .from('customers')
-        .select('*')
-        .order('created_at', { ascending: false })
-      if (error) throw error
-      setCustomers(data || [])
+    const { data } = await supabase
+      .from('customers')
+      .select('*')
+      .order('created_at', { ascending: false })
+    setCustomers(data || [])
 
-      const { data: orders, error: ordersError } = await supabase
-        .from('orders')
-        .select('total_amount')
-        .eq('payment_status', 'paid')
-      if (ordersError) throw ordersError
-      const revenue = orders?.reduce((sum, o) => sum + (o.total_amount || 0), 0) || 0
-      const returning = (data || []).filter(c => c.customer_type === 'returning').length
+    const { data: invs } = await supabase
+      .from('invoices')
+      .select('total')
+    const revenue = invs?.reduce((sum, o) => sum + (o.total || 0), 0) || 0
+    const returning = (data || []).filter(c => c.customer_type === 'returning').length
 
-      setStats({ total: (data || []).length, returning, revenue })
-    } catch (err) {
-      setLoadError(err instanceof Error ? err.message : '无法连接数据库')
-      setCustomers([])
-    } finally {
-      setLoading(false)
-    }
+    setStats({ total: (data || []).length, returning, revenue })
+    setLoading(false)
   }
 
   async function addCustomer() {
     if (!form.name) return alert('请填写客户姓名')
-    const { error } = await supabase.from('customers').insert(form)
-    if (error) return alert(`新增客户失败:${error.message}`)
+    await supabase.from('customers').insert(form)
     setForm({ name: '', phone: '', email: '', customer_type: 'new', hair_concern: '', notes: '' })
     setShowForm(false)
     loadCustomers()
@@ -80,7 +68,7 @@ export default function Dashboard() {
         {[
           { label: '总客户数', value: `${stats.total} 人` },
           { label: '回购客', value: `${stats.returning} 人` },
-          { label: '已收款', value: `RM ${stats.revenue.toLocaleString()}` },
+          { label: '已开票', value: `RM ${stats.revenue.toLocaleString()}` },
         ].map(s => (
           <div key={s.label} className="bg-amber-50 border border-amber-100 rounded-xl p-4">
             <p className="text-sm text-amber-600">{s.label}</p>
@@ -125,14 +113,6 @@ export default function Dashboard() {
 
         {loading ? (
           <p className="text-center text-gray-400 py-8">加载中...</p>
-        ) : loadError ? (
-          <div className="text-center py-8">
-            <p className="text-red-600 font-medium mb-1">⚠️ 无法加载客户数据</p>
-            <p className="text-gray-400 text-xs mb-3">{loadError}</p>
-            <button onClick={loadCustomers} className="border border-gray-200 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm">
-              重试
-            </button>
-          </div>
         ) : (
           <table className="w-full text-sm">
             <thead>
